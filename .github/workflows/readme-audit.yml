@@ -1,0 +1,24 @@
+name: readme-audit
+on:
+  schedule:
+    - cron: '0 9 1 */6 *'   # Jan 1 and Jul 1, 09:00 UTC
+  workflow_dispatch:
+permissions:
+  issues: write
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -e
+          gh repo list SBU-BMI --limit 300 --json name,isArchived,isFork \
+            -q '.[] | select((.isArchived or .isFork) | not) | .name' | grep -vx '.github' | sort > all.txt
+          grep -o 'github.com/SBU-BMI/[^)]*' profile/README.md | sed 's#.*/##' | sort -u > listed.txt
+          comm -23 all.txt listed.txt > missing.txt
+          [ -s missing.txt ] || exit 0
+          { echo "Repos in org but not in profile/README.md:"; echo; sed 's/^/- /' missing.txt; } > body.txt
+          gh issue create --title "README audit $(date +%F)" --body-file body.txt
